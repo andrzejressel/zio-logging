@@ -18,7 +18,8 @@ package zio.logging.slf4j.bridge
 import org.slf4j.event.{ KeyValuePair, Level }
 import org.slf4j.helpers.MessageFormatter
 import zio.logging.LogFilter
-import zio.{ Cause, Fiber, FiberId, FiberRef, FiberRefs, LogLevel, Runtime, Trace, Unsafe }
+import zio.logging.internal.StackFrameFinder.findUserTrace
+import zio.{Cause, Fiber, FiberId, FiberRef, FiberRefs, LogLevel, Runtime, Trace, Unsafe}
 
 import scala.jdk.CollectionConverters._
 

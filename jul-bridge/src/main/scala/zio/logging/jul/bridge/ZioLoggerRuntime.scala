@@ -16,11 +16,12 @@
 package zio.logging.jul.bridge
 
 import zio.logging.LogFilter
+import zio.logging.internal.StackFrameFinder
 import zio.{ Cause, Fiber, FiberId, FiberRef, FiberRefs, LogLevel, Runtime, Trace, Unsafe }
 
 import java.util.logging.{ Handler, Level, LogRecord }
 
-final class ZioLoggerRuntime(runtime: Runtime[Any], filter: LogFilter[Any]) extends Handler {
+final class ZioLoggerRuntime(runtime: Runtime[Any], filter: LogFilter[Any], enableTracing: Boolean) extends Handler {
 
   override def publish(record: LogRecord): Unit = {
     if (!isEnabled(record.getLoggerName, record.getLevel)) {
@@ -34,7 +35,13 @@ final class ZioLoggerRuntime(runtime: Runtime[Any], filter: LogFilter[Any]) exte
       val throwable = record.getThrown
 
       val logLevel     = ZioLoggerRuntime.logLevelMapping(level)
-      val trace        = Trace.empty
+      val trace = if (enableTracing) {
+        StackFrameFinder
+          .findUserTrace("java.util.logging")
+          .getOrElse(Trace.empty)
+      } else {
+        Trace.empty
+      }
       val fiberId      = FiberId.Gen.Live.make(trace)
       val currentFiber = Fiber._currentFiber.get()
 

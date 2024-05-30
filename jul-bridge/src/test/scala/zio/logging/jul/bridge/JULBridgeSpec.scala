@@ -142,6 +142,59 @@ object JULBridgeSpec extends ZIOSpecDefault {
           )
         )
       }.provide(JULBridge.initializeWithoutFiberRefPropagation),
+      test("logs tracer when enabled") {
+        for {
+          _      <- (for {
+            logger <- ZIO.attempt(Logger.getLogger("test.logger"))
+            _      <- ZIO.attempt(traceTest(logger))
+          } yield ()).exit
+          output <- ZTestLogger.logOutput
+          linesWithTraces   = output.map { logEntry =>
+            logEntry.trace -> logEntry.message()
+          }
+        } yield assertTrue(
+          linesWithTraces == Chunk(
+            ("")
+          )
+        )
+      }.provide(JULBridge.initialize(enableTracing = true)),
+      test("does not log tracer when disabled") {
+        for {
+          _      <- (for {
+            logger <- ZIO.attempt(Logger.getLogger("test.logger"))
+            _      <- ZIO.logSpan("span")(ZIO.attempt(logger.fine("test fine message"))) @@ ZIOAspect
+              .annotated("trace_id", "tId")
+            _      <- ZIO.attempt(logger.warning("hello world")) @@ ZIOAspect.annotated("user_id", "uId")
+          } yield ()).exit
+          output <- ZTestLogger.logOutput
+          lines   = output.map { logEntry =>
+            LogEntry(
+              logEntry.spans.map(_.label),
+              logEntry.logLevel,
+              logEntry.annotations,
+              logEntry.message(),
+              logEntry.cause
+            )
+          }
+        } yield assertTrue(
+          lines == Chunk(
+            LogEntry(
+              List("test.logger"),
+              LogLevel.Debug,
+              Map(zio.logging.loggerNameAnnotationKey -> "test.logger"),
+              "test fine message",
+              Cause.empty
+            ),
+            LogEntry(
+              List("test.logger"),
+              LogLevel.Warning,
+              Map(zio.logging.loggerNameAnnotationKey -> "test.logger"),
+              "hello world",
+              Cause.empty
+            )
+          )
+        )
+      }.provide(JULBridge.initialize(enableTracing = false)),
       test("logs through slf4j with filter") {
         filterTest
       }.provide(
@@ -223,6 +276,10 @@ object JULBridgeSpec extends ZIOSpecDefault {
         )
       )
     )
+
+  def traceTest(logger: Logger): Unit = {
+    logger.info("Trace test")
+  }
 
   def removeExistingHandlers: ZIO[Any, Nothing, Unit] =
     ZIO.succeed(

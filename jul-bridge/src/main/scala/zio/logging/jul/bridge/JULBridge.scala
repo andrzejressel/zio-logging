@@ -28,44 +28,45 @@ object JULBridge {
   /**
    * initialize java.util.Logging bridge
    */
-  def initialize: ZLayer[Any, Nothing, Unit] = init(LogFilter.acceptAll)
+  def initialize(enableTracing: Boolean = false): ZLayer[Any, Nothing, Unit] = init(LogFilter.acceptAll, enableTracing)
 
   /**
    * initialize java.util.Logging bridge with `LogFilter`
    *
    * @param filter Log filter
    */
-  def init(filter: LogFilter[Any]): ZLayer[Any, Nothing, Unit] = Runtime.enableCurrentFiber ++ layer(filter)
+  def init(filter: LogFilter[Any], enableTracing: Boolean = false): ZLayer[Any, Nothing, Unit] = Runtime.enableCurrentFiber ++ layer(filter, enableTracing)
 
   /**
    * initialize java.util.Logging bridge with `LogFilter` from configuration
    * @param configPath configuration path
    */
-  def init(configPath: NonEmptyChunk[String] = logFilterConfigPath): ZLayer[Any, Config.Error, Unit] =
-    Runtime.enableCurrentFiber ++ layer(configPath)
+  def init(configPath: NonEmptyChunk[String] = logFilterConfigPath, enableTracing: Boolean = false): ZLayer[Any, Config.Error, Unit] =
+    Runtime.enableCurrentFiber ++ layer(configPath, enableTracing)
 
   /**
    * initialize java.util.Logging bridge without `FiberRef` propagation
    */
-  def initializeWithoutFiberRefPropagation: ZLayer[Any, Nothing, Unit] = initWithoutFiberRefPropagation(
-    LogFilter.acceptAll
+  def initializeWithoutFiberRefPropagation(enableTracing: Boolean = false): ZLayer[Any, Nothing, Unit] = initWithoutFiberRefPropagation(
+    LogFilter.acceptAll,
+    enableTracing
   )
 
   /**
    * initialize java.util.Logging bridge with `LogFilter`, without `FiberRef` propagation
    * @param filter Log filter
    */
-  def initWithoutFiberRefPropagation(filter: LogFilter[Any]): ZLayer[Any, Nothing, Unit] = layer(filter)
+  def initWithoutFiberRefPropagation(filter: LogFilter[Any], enableTracing: Boolean = false): ZLayer[Any, Nothing, Unit] = layer(filter, enableTracing)
 
   private val initLock = Semaphore.unsafe.make(1)(Unsafe.unsafe)
 
-  private def layer(filter: LogFilter[Any]): ZLayer[Any, Nothing, Unit] =
-    ZLayer(make(filter))
+  private def layer(filter: LogFilter[Any], enableTracing: Boolean): ZLayer[Any, Nothing, Unit] =
+    ZLayer(make(filter, enableTracing))
 
-  private def layer(configPath: NonEmptyChunk[String]): ZLayer[Any, Config.Error, Unit] =
-    ZLayer(make(configPath))
+  private def layer(configPath: NonEmptyChunk[String], enableTracing: Boolean): ZLayer[Any, Config.Error, Unit] =
+    ZLayer(make(configPath, enableTracing))
 
-  def make(filter: LogFilter[Any]): ZIO[Any, Nothing, Unit] =
+  def make(filter: LogFilter[Any], enableTracing: Boolean): ZIO[Any, Nothing, Unit] =
     for {
       runtime <- ZIO.runtime[Any]
       _       <- initLock.withPermit {
@@ -75,12 +76,12 @@ object JULBridge {
 
                      java.util.logging.Logger
                        .getLogger("")
-                       .addHandler(new ZioLoggerRuntime(runtime, filter))
+                       .addHandler(new ZioLoggerRuntime(runtime, filter, enableTracing))
                    }
                  }
     } yield ()
 
-  def make(configPath: NonEmptyChunk[String] = logFilterConfigPath): ZIO[Any, Config.Error, Unit] =
-    LogFilter.LogLevelByNameConfig.load(configPath).flatMap(c => make(c.toFilter))
+  def make(configPath: NonEmptyChunk[String] = logFilterConfigPath, enableTracing: Boolean): ZIO[Any, Config.Error, Unit] =
+    LogFilter.LogLevelByNameConfig.load(configPath).flatMap(c => make(c.toFilter, enableTracing))
 
 }
